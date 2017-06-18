@@ -44,9 +44,13 @@
           {{ range .Album }}
           <div class="row">
             <center>
-              <img src="{{ .URI }}" alt="{{ .Name }}" />
+              <a href="{{ .URI }}">
+                <img src="{{ .URI }}" alt="{{ .Name }}" />
+              </a>
             </center>
           </div>
+          {{ else }}
+          <a href="/upload">Upload some images first!</a>
           {{ end }}
         </div>
       </div>

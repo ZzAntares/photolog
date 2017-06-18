@@ -10,7 +10,17 @@ After getting `go` installed, you simply clone the repo, put some initial images
 (optional) in the `uploads/` folder and run it like so:
 
 ```sh
-$ go run main.go
+$ go install
+$ photolog
 ```
 
 This creates a server configured to run on `http://localhost:9000`.
+
+Theoretically you can use `go get` to do all of this for yourself:
+
+```sh
+$ go get git@github.com:ZzAntares/photolog.git
+$ photolog
+```
+
+## [LICENSE](https://www.gnu.org/licenses/gpl-3.0.txt)

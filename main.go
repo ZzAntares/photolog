@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gorilla/sessions"
 	"html/template"
 	"io"
@@ -23,56 +24,6 @@ type Data struct {
 	Album      []Image
 	IsLoggedIn bool
 	Username   string
-}
-
-func IsImage(file os.FileInfo) bool {
-	if file.IsDir() {
-		return false
-	}
-
-	// To check tha file is an image
-	var is func(string) bool = func(ftype string) bool {
-		return strings.HasSuffix(strings.ToLower(file.Name()), "."+ftype)
-	}
-
-	return is("jpg") || is("png") || is("jpeg")
-}
-
-func IsLoggedIn(req *http.Request) bool {
-	session, err := cookieStore.Get(req, "session")
-	if err != nil {
-		// Session tampered
-		return false
-	}
-
-	_, ok := session.Values["username"]
-	return ok
-}
-
-func CurrentUser(req *http.Request) (string, bool) {
-	session, err := cookieStore.Get(req, "session")
-	if err != nil {
-		return "", false
-	}
-
-	user, ok := session.Values["username"]
-	if user != nil {
-		var username string = user.(string)
-
-		return username, ok
-	}
-
-	return "", ok // TODO: A username shouldn't be allowed to be empty string
-}
-
-func CheckAuth(req *http.Request) (username string, authenticated bool) {
-	username, password := req.FormValue("username"), req.FormValue("password")
-
-	if username == "demo" && password == "demo" {
-		return username, true
-	}
-
-	return "", false
 }
 
 func HomeHandler(w http.ResponseWriter, req *http.Request) {
@@ -162,14 +113,16 @@ func UploadsHandler(w http.ResponseWriter, req *http.Request) {
 
 	file, fheader, err := req.FormFile("image")
 	if err != nil {
-		http.Error(w, "Can't handle file "+err.Error(), http.StatusInternalServerError)
+		// No file was submited
+		log.Println("Couldn't handle file:", err.Error())
+		http.Redirect(w, req, "/upload", http.StatusFound)
 		return
 	}
 	defer file.Close()
 
-	if fileInfo, _ := os.Stat(fheader.Filename); !IsImage(fileInfo) {
-		// Only can upload images
-		http.Redirect(w, req, "/upload", http.StatusInternalServerError)
+	// Only can upload images
+	if !HasImageName(fheader.Filename) {
+		http.Redirect(w, req, "/upload", http.StatusFound)
 		return
 	}
 
@@ -262,6 +215,10 @@ func main() {
 	http.HandleFunc("/logout", LogoutHandler)
 
 	http.HandleFunc("/home", HomeHandler)
+	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+		fmt.Println(req.URL)
+		http.Redirect(w, req, "/home", http.StatusFound)
+	})
 
 	// use templates and CSS to make it look pretty
 	// use a ssl certificate (can be auto signed)
