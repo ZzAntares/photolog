@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8"/>
@@ -27,6 +27,7 @@
           </ul>
           <ul class="nav navbar-nav navbar-right">
             {{ if .IsLoggedIn }}
+            <li><a href="/upload">Upload</a></li>
             <li><a href="/logout">Logout</a></li>
             {{ else }}
             <li><a href="/login">Login</a></li>

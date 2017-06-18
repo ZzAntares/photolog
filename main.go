@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/gorilla/sessions"
 	"html/template"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -143,6 +144,55 @@ func GalleryHandler(w http.ResponseWriter, req *http.Request) {
 
 func UploadsHandler(w http.ResponseWriter, req *http.Request) {
 	// /upload form for uploading a new photo (requires a session)
+	if !IsLoggedIn(req) {
+		http.Redirect(w, req, "/login", http.StatusFound)
+		return
+	}
+
+	if req.Method == "GET" {
+		tpl, err := template.ParseFiles("templates/upload.html.tmpl")
+		if err != nil {
+			http.Error(w, "Parsing template: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		tpl.Execute(w, nil)
+		return
+	}
+
+	file, fheader, err := req.FormFile("image")
+	if err != nil {
+		http.Error(w, "Can't handle file "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+
+	if fileInfo, _ := os.Stat(fheader.Filename); !IsImage(fileInfo) {
+		// Only can upload images
+		http.Redirect(w, req, "/upload", http.StatusInternalServerError)
+		return
+	}
+
+	// Not recomended on prod
+	outputFile, err := os.Create("uploads/" + fheader.Filename)
+	if err != nil {
+		http.Error(
+			w,
+			"Error uploading file to destination. "+err.Error(),
+			http.StatusInternalServerError)
+		return
+	}
+	defer outputFile.Close()
+
+	// Write uplaoded byte stream to output file
+
+	_, err = io.Copy(outputFile, file)
+	if err != nil {
+		http.Error(w, "Error writing to destination. "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, req, "/home", http.StatusFound)
 }
 
 func LoginHandler(w http.ResponseWriter, req *http.Request) {
