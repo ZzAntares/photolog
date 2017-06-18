@@ -9,4 +9,12 @@ img {
 
 .album {
   background-color: #1c1e22;
+  margin-top: 50px;
+}
+
+
+/* LOGIN */
+
+.login {
+  margin-top: 180px;
 }

@@ -1,9 +1,8 @@
 package main
 
 import (
-	"fmt"
+	"github.com/gorilla/sessions"
 	"html/template"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -11,10 +10,18 @@ import (
 	"strings"
 )
 
+var cookieStore = sessions.NewCookieStore([]byte("secret-session-salt"))
+
 type Image struct {
 	Name string
 	URI  string
-	// Add size to struct?
+	// Add image size to struct?
+}
+
+type Data struct {
+	Album      []Image
+	IsLoggedIn bool
+	Username   string
 }
 
 func IsImage(file os.FileInfo) bool {
@@ -30,14 +37,46 @@ func IsImage(file os.FileInfo) bool {
 	return is("jpg") || is("png") || is("jpeg")
 }
 
+func IsLoggedIn(req *http.Request) bool {
+	session, err := cookieStore.Get(req, "session")
+	if err != nil {
+		// Session tampered
+		return false
+	}
+
+	_, ok := session.Values["username"]
+	return ok
+}
+
+func CurrentUser(req *http.Request) (string, bool) {
+	session, err := cookieStore.Get(req, "session")
+	if err != nil {
+		return "", false
+	}
+
+	user, ok := session.Values["username"]
+	if user != nil {
+		var username string = user.(string)
+
+		return username, ok
+	}
+
+	return "", ok // TODO: A username shouldn't be allowed to be empty string
+}
+
+func CheckAuth(req *http.Request) (username string, authenticated bool) {
+	username, password := req.FormValue("username"), req.FormValue("password")
+
+	if username == "demo" && password == "demo" {
+		return username, true
+	}
+
+	return "", false
+}
+
 func HomeHandler(w http.ResponseWriter, req *http.Request) {
 	// Show a list of photos in the uploads directory
 	// clicking a photo downloads it
-	tpl, err := template.ParseFiles("templates/home.html.tmpl")
-	if err != nil {
-		http.Error(w, "Parsing template: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
 	files, err := ioutil.ReadDir("uploads/")
 	if err != nil {
 		http.Error(w, "Can't fetch uploads dir.", http.StatusInternalServerError)
@@ -58,7 +97,21 @@ func HomeHandler(w http.ResponseWriter, req *http.Request) {
 		})
 	}
 
-	tpl.Execute(w, album)
+	tpl, err := template.ParseFiles("templates/home.html.tmpl")
+	if err != nil {
+		http.Error(w, "Parsing template: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	username, isLoggedIn := CurrentUser(req)
+
+	var data Data = Data{
+		Album:      album,
+		Username:   username,
+		IsLoggedIn: isLoggedIn,
+	}
+
+	tpl.Execute(w, data)
 }
 
 func GalleryHandler(w http.ResponseWriter, req *http.Request) {
@@ -93,6 +146,11 @@ func UploadsHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func LoginHandler(w http.ResponseWriter, req *http.Request) {
+	if IsLoggedIn(req) {
+		http.Redirect(w, req, "/home", http.StatusFound)
+		return
+	}
+
 	// login requires ssl (can hardcode user and password)
 	if method := req.Method; method == "GET" {
 		tpl, err := template.ParseFiles("templates/login.html.tmpl")
@@ -105,12 +163,39 @@ func LoginHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	io.WriteString(w, "POST isn't supported yet, but I got your details!")
-	fmt.Println(req.PostForm)
+	username, authOk := CheckAuth(req)
+	if !authOk {
+		http.Redirect(w, req, "/login", http.StatusFound)
+		return
+	}
+
+	session, err := cookieStore.Get(req, "session")
+	if err != nil {
+		// Posibly session has been tampered
+		// TODO: erase session?
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	session.Values["username"] = username
+	session.Save(req, w)
+
+	http.Redirect(w, req, "/home", http.StatusTemporaryRedirect)
 }
 
 func LogoutHandler(w http.ResponseWriter, req *http.Request) {
 	// logout (deletes session)
+	if !IsLoggedIn(req) {
+		http.Redirect(w, req, "/home", http.StatusFound)
+		return
+	}
+
+	// Destroy session
+	session, _ := cookieStore.Get(req, "session")
+	session.Options.MaxAge = -1
+	session.Save(req, w)
+
+	http.Redirect(w, req, "/home", http.StatusFound)
 }
 
 func main() {
